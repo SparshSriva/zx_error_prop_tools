@@ -7,6 +7,7 @@ import re
 import matplotlib.pyplot as plt
 import pprint
 import re
+import networkx as nx
 
 def generate_rotated_surface_code(d):
     """
@@ -349,14 +350,14 @@ def generate_surface_code_qasm(d, custom_cnot_orderings=None):
     qasm_header += "OPENQASM 2.0;\n"
     qasm_header += 'include "qelib1.inc";\n'
     qasm_header += f"qreg q[{num_data}];\n"
-    qasm_header += f"qreg qq[{num_ancilla}];\n"
+    qasm_header += f"qreg a[{num_ancilla}];\n"
     
     qasm_body = ""
     for i, ancilla in enumerate(ancilla_qubits):
         ancilla_label = ancilla['label']
         ancilla_type = ancilla_label[0]
         
-        qasm_body += f"\n// Stabilizer for {ancilla_label} (qq[{i}])\n"
+        qasm_body += f"\n// Stabilizer for {ancilla_label} (a[{i}])\n"
         
         connected_qubits = connectivity[ancilla_label]
         
@@ -372,10 +373,111 @@ def generate_surface_code_qasm(d, custom_cnot_orderings=None):
         # Generate the gates for this stabilizer
         if ancilla_type == 'Z':
             for data_q_idx in ordered_qubits:
-                qasm_body += f"cx qq[{i}], q[{data_q_idx}];\n"
+                qasm_body += f"cx q[{data_q_idx}], a[{i}];\n"
         elif ancilla_type == 'X':
-            qasm_body += f"h qq[{i}];\n"
+            qasm_body += f"h a[{i}];\n"
             for data_q_idx in ordered_qubits:
-                qasm_body += f"cx q[{data_q_idx}], qq[{i}];\n"
-            qasm_body += f"h qq[{i}];\n"   
+                qasm_body += f"cx a[{i}], q[{data_q_idx}];\n"
+            qasm_body += f"h a[{i}];\n"   
     return qasm_header + qasm_body
+
+def get_qubit_errors(g: zx.Graph, qubits_to_check: list, final_web: PauliWeb) -> dict:
+    """
+    Extracts the final Pauli errors on a specified list of qubits that are outputs.
+
+    Args:
+        g: The ZX-diagram of the circuit.
+        qubits_to_check: A list of qubit info dicts (containing coords and labels).
+        final_web: The PauliWeb containing the full error and correction paths.
+
+    Returns:
+        A dictionary mapping each qubit's label to its resulting error ('X', 'Y', or 'Z').
+    """
+    if not final_web:
+        return {}
+
+    # Create a reverse mapping from qubit coordinates to vertex indices
+    coord_to_vertex = {coord: v for v, coord in g.qubit_map.items()}
+    output_errors = {}
+    error_dict = final_web.es
+
+    for qubit_info in qubits_to_check:
+        qubit_coord = qubit_info['coord']
+        qubit_label = qubit_info['label']
+
+        v_idx = coord_to_vertex.get(qubit_coord)
+        # Ensure the qubit is a graph output before checking for an error
+        if v_idx is None or v_idx not in g.outputs():
+            continue
+
+        v_neighbor = next(iter(g.neighbors(v_idx)))
+        half_edge_key = (v_idx, v_neighbor)
+        error = error_dict.get(half_edge_key, 'I')
+
+        if error != 'I':
+            output_errors[qubit_label] = error
+
+    return output_errors
+
+def get_syndrome(g: zx.Graph, ancillas: list, final_web: PauliWeb) -> list:
+    """
+    Extracts the error syndrome by identifying which ancilla measurements flipped.
+
+    Args:
+        g: The ZX-diagram of the circuit.
+        ancillas: A list of the ancilla qubit data (labels and coordinates).
+        final_web: The PauliWeb containing the full error and correction paths.
+
+    Returns:
+        A list of ancilla qubits that form the syndrome (i.e., "defects").
+    """
+    # Get all non-identity errors on the ancilla qubits
+    ancilla_errors = get_qubit_errors(g, ancillas, final_web)
+
+    syndrome = []
+    for ancilla_info in ancillas:
+        ancilla_label = ancilla_info['label']
+        error = ancilla_errors.get(ancilla_label, 'I')
+
+        # Determine if the ancilla measurement is flipped.
+        # A Z-stabilizer measures in the Z-basis, so an X or Y error flips it.
+        # An X-stabilizer measures in the X-basis, so a Z or Y error flips it.
+        ancilla_type = ancilla_label[0]
+
+        is_defect = False
+        if ancilla_type == 'Z' and error in ('X', 'Y'):
+            is_defect = True
+        elif ancilla_type == 'X' and error in ('Z', 'Y'):
+            is_defect = True
+
+        if is_defect:
+            syndrome.append(ancilla_info)
+
+    return syndrome
+
+def create_matching_graph(syndrome: list) -> nx.Graph:
+    """
+    Creates a graph for the MWPM decoder.
+
+    Args:
+        syndrome: A list of defective ancilla qubits.
+
+    Returns:
+        A networkx graph where nodes are defective ancillas and edge weights are
+        the Manhattan distance between them.
+    """
+    matching_graph = nx.Graph()
+    for i in range(len(syndrome)):
+        for j in range(i + 1, len(syndrome)):
+            ancilla1 = syndrome[i]
+            ancilla2 = syndrome[j]
+            
+            coord1 = ancilla1['coord']
+            coord2 = ancilla2['coord']
+            
+            # Calculate Manhattan distance
+            distance = abs(coord1[0] - coord2[0]) + abs(coord1[1] - coord2[1])
+            
+            matching_graph.add_edge(i, j, weight=distance)
+            
+    return matching_graph
