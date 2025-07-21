@@ -182,9 +182,6 @@ def PropagatePauliError(g: zx.Graph, initial_errors: List[Tuple[Tuple[int, int],
     for half_edge, error_type in initial_errors:
         err.add_half_edge(half_edge, error_type)
         
-    print("--- Visualizing Error Propagation and Correction ---")
-    print("1. Initial errors introduced in the circuit:")
-    zx.draw(g, labels=True, pauli_web=err)
 
     # 2. Compute the backward-propagated Pauli webs from the outputs.
     try:
