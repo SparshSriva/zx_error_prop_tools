@@ -4,7 +4,6 @@ from typing import List, Tuple, Dict
 import matplotlib.pyplot as plt
 import pprint
 import re
-import re
 
 def generate_rotated_surface_code(d):
     """Generates a 2D qubit map for a rotated surface code."""
