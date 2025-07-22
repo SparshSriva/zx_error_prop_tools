@@ -162,7 +162,7 @@ def generate_pyzx_and_plot_rotated_code(d):
 
     return pyzx_qubit_map, all_ancillas
 
-def PropagatePauliError(g: zx.Graph, initial_errors: List[Tuple[Tuple[int, int], str]]):
+def PropagatePauliError(g: zx.Graph, initial_errors: List[Tuple[Tuple[int, int], str]], add_init=True):
     """
     Takes a list of initial errors, calculates the full propagation and correction
     paths, and returns the final web and a log of corrections.
@@ -171,49 +171,60 @@ def PropagatePauliError(g: zx.Graph, initial_errors: List[Tuple[Tuple[int, int],
         g: The ZX-diagram of the circuit.
         initial_errors: A list of tuples, where each tuple defines an error as
                         ((vertex1, vertex2), error_type).
-    
+        add_init: If True, the output web includes the initial errors.
+                  If False, it includes only the resulting corrections.
+
     Returns:
         A tuple containing (final_web, log), where final_web is a PauliWeb object
-        with the full error and correction paths, and log is a list of strings
+        with the error and/or correction paths, and log is a list of strings
         describing the corrections made.
     """
-    # 1. Create the initial PauliWeb from the list of errors.
-    err = PauliWeb(g)
-    for half_edge, error_type in initial_errors:
-        err.add_half_edge(half_edge, error_type)
-        
 
-    # 2. Compute the backward-propagated Pauli webs from the outputs.
     try:
         order, zwebs, xwebs = compute_pauli_webs(g, backwards=True)
     except (ValueError, KeyError) as e:
         print(f"Error: Could not compute gflow for the graph: {e}")
         return None, []
 
-    # 3. Create a copy of the web to add corrections to.
-    final_web = err.copy()
-    
-    # 4. Determine and apply corrections at the outputs.
-    output_edges = [(o, next(iter(g.neighbors(o)))) for o in g.outputs()]
-    
+    # 1. Create a web that will ONLY hold the initial errors.
+    initial_error_web = PauliWeb(g)
+    for half_edge, error_type in initial_errors:
+        initial_error_web.add_half_edge(half_edge, error_type)
+
+    # 2. Create a separate web to accumulate the corrections.
+    correction_web = PauliWeb(g)
     log = []
+
+    # 3. Determine corrections by checking commutation against the initial error web.
+    output_edges = [(o, next(iter(g.neighbors(o)))) for o in g.outputs()]
+
     for o, n in output_edges:
         # Check Z-web commutation. If it anti-commutes, add an X correction.
-        if o in zwebs and not zwebs[o].commutes_with(final_web):
+        # ALWAYS check against the initial_error_web.
+        if o in zwebs and not zwebs[o].commutes_with(initial_error_web):
             log.append(f"Z-web for output {o}: anti-commutes, added X")
-            final_web.add_half_edge((o, n), 'X')
+            # Add the correction to the dedicated correction_web.
+            correction_web.add_half_edge((o, n), 'X')
         else:
-            if o in zwebs: log.append(f"Z-web for output {o}: commutes")
-            
+            if o in zwebs:
+                log.append(f"Z-web for output {o}: commutes")
+
         # Check X-web commutation. If it anti-commutes, add a Z correction.
-        # This is NOT an `elif` so that Y-errors (which anti-commute with both)
-        # get both an X and a Z correction.
-        if o in xwebs and not xwebs[o].commutes_with(final_web):
+        if o in xwebs and not xwebs[o].commutes_with(initial_error_web):
             log.append(f"X-web for output {o}: anti-commutes, added Z")
-            final_web.add_half_edge((o, n), 'Z')
+            correction_web.add_half_edge((o, n), 'Z')
         else:
-            if o in xwebs: log.append(f"X-web for output {o}: commutes")
-            
+            if o in xwebs:
+                log.append(f"X-web for output {o}: commutes")
+
+    # 4. Decide what to return based on the flag.
+    if add_init:
+        # Combine initial errors and corrections. The '+' operator on PauliWebs does this.
+        final_web = initial_error_web * correction_web
+    else:
+        # Return only the corrections.
+        final_web = correction_web
+
     return final_web, log
 
 def get_output_errors(g: zx.Graph, final_web: PauliWeb) -> Dict[int, str]:
