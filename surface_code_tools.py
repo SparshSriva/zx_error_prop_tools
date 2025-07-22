@@ -4,7 +4,6 @@ from typing import List, Tuple, Dict
 import matplotlib.pyplot as plt
 import pprint
 import re
-import pprint
 import re
 
 def generate_rotated_surface_code(d):
