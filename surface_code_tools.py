@@ -5,27 +5,7 @@ import matplotlib.pyplot as plt
 import pprint
 import re
 
-def generate_rotated_surface_code(d):
-    """Generates a 2D qubit map for a rotated surface code."""
-    if not isinstance(d, int) or d < 3 or d % 2 == 0:
-        raise ValueError("Distance d must be an odd integer >= 3.")
-    size = 2 * d + 1
-    sc_map = [[0] * size for _ in range(size)]
-    data_idx, x_idx, z_idx = 0, 0, 0
-    for r in range(1, 2 * d, 2):
-        for c in range(1, 2 * d, 2):
-            sc_map[r][c] = f'd{data_idx}'; data_idx += 1
-    for i in range(1, d):
-        for j in range(d + 1):
-            if (i + j) % 2 == 0:
-                r, c = 2 * i, 2 * j
-                if r < size and c < size: sc_map[r][c] = f'Z{z_idx}'; z_idx += 1
-    for i in range(d + 1):
-        for j in range(1, d):
-            if (i + j) % 2 != 0:
-                r, c = 2 * i, 2 * j
-                if r < size and c < size: sc_map[r][c] = f'X{x_idx}'; x_idx += 1
-    return sc_map
+# Removed the first definition of generate_rotated_surface_code to avoid redundancy.
 
 def generate_rotated_surface_code(d):
     """
