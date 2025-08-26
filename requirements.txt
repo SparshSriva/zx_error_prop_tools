@@ -1,0 +1,7 @@
+pyzx
+stim
+numpy
+matplotlib
+networkx
+jupyter
+quimb

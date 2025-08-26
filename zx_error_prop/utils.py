@@ -1,19 +1,21 @@
-from numpy import sum, log2
+from typing import List
+import numpy as np
+import pyzx as zx
+from pyzx import VertexType
+from numpy import sum, log2, abs, real, diag
 from numpy.random import choice
-from pyzx import Graph, VertexType
-from numpy import abs, real, diag
-from typing import Dict, Any, Optional, Tuple, List
 
-def sample_bitstrings(prob_vector, n_samples):
+def sample_bitstrings(prob_vector: np.ndarray, n_samples: int) -> List[str]:
     """
     Samples bitstrings based on the given probability vector.
 
-    Parameters:
-        prob_vector (numpy.ndarray): A vector where each entry represents the probability of a bitstring.
+    Args:
+        prob_vector (np.ndarray): A vector where each entry represents the
+                                  probability of a bitstring.
         n_samples (int): The number of samples to generate.
 
     Returns:
-        list: A list of sampled bitstrings.
+        List[str]: A list of sampled bitstrings.
     """
 
     prob_vector = prob_vector / sum(prob_vector)
@@ -25,16 +27,16 @@ def sample_bitstrings(prob_vector, n_samples):
     
     return sampled_bitstrings
 
-def graphical_partial_trace(graph: Graph, qubits: list) -> Graph:
+def graphical_partial_trace(graph: zx.Graph, qubits: List[int]) -> zx.Graph:
     """
     Computes the graphical partial trace of a graph over specified qubits.
 
-    Parameters:
-        graph (Graph): The input graph, must be a state.
-        qubits (list): List of qubit indices to trace out.
+    Args:
+        graph (zx.Graph): The input graph, must be a state.
+        qubits (List[int]): List of qubit indices to trace out.
 
     Returns:
-        Graph: New graph after performing the partial trace.
+        zx.Graph: New graph after performing the partial trace.
     """
     gc = graph.copy().adjoint() + graph.copy()
     outs = gc.outputs()
@@ -45,18 +47,18 @@ def graphical_partial_trace(graph: Graph, qubits: list) -> Graph:
         gc.add_edge((outs[q], ins[q]))
     return gc
 
-def sampler(graph: Graph, qubits: list, n_samples: int) -> list:
+def sampler(graph: zx.Graph, qubits: List[int], n_samples: int) -> List[str]:
     """
     Samples bitstrings from the given graph.
 
-    Parameters:
-        graph (Graph): The input graph, must be a state.
-        qubits (list): List of qubit indices to trace out. 
-                       Sample over remaining qubits.
+    Args:
+        graph (zx.Graph): The input graph, must be a state.
+        qubits (List[int]): List of qubit indices to trace out.
+                            Sample over remaining qubits.
         n_samples (int): The number of samples to generate.
 
     Returns:
-        list: A list of sampled bitstrings. 
+        List[str]: A list of sampled bitstrings.
     """
     traced = graphical_partial_trace(graph, qubits)
     sample = abs(real(diag(traced.to_matrix(preserve_scalar=True))))
